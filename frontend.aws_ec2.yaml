@@ -16,3 +16,17 @@ hostnames:
 compose:
   # This sets the `ansible_host` variable to connect with the private IP address without changing the hostname.
   ansible_host: private_ip_address
+
+# ----Ungrouped results appear when run -ansible-inventory -i frontend.aws_ec2.yaml --graph
+# @all:
+#   |--@ungrouped:
+#   |--@aws_ec2:
+#   |  |--172.31.21.59
+#   |  |--172.31.21.13
+#   |  |--172.31.26.242
+
+keyed_groups:
+  # add hosts to tag_Name_value groups for each aws_ec2 host's tags.Name variable.
+  - key: tags.Name
+    prefix: "dynamic" #dyanmic-frontend
+    separator: "-"
