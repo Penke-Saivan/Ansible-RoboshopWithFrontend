@@ -1,0 +1,108 @@
+---
+- name: Setting up Shipping server
+  hosts: shipping
+  become: yes
+  tasks:
+    - name: Installing mAven
+      ansible.builtin.dnf:
+        name: maven
+        state: present
+    - name: install mysql python libraries
+      ansible.builtin.pip:  
+        executable: pip3.9  
+        name: "{{ item }}"
+      loop:
+      - cryptography
+      - PyMySQL
+
+
+    - name: Add application User- System User
+      ansible.builtin.user:
+        name: roboshop
+        comment: roboshop system user
+        home: /app
+        system: true
+        shell: /sbin/nologin
+
+    #Removing app directory if already exists
+    - name: Lets remove an app directory if already exists.
+      ansible.builtin.file:
+        path: /app
+        state: absent
+
+    - name: Lets setup an app directory.
+      ansible.builtin.file:
+        path: /app
+        state: directory
+
+    #Removing shipping file
+    - name: Lets remove a shipping file
+      ansible.builtin.file:
+        path: /tmp/shipping.zip
+        state: absent
+
+    - name: Download the application code
+      ansible.builtin.get_url:
+        url: https://roboshop-artifacts.s3.amazonaws.com/shipping-v3.zip
+        dest: /tmp/shipping.zip
+
+    - name: Extract shipping to application /app
+      ansible.builtin.unarchive:
+        src: /tmp/shipping.zip
+        dest: /app
+        remote_src: yes
+
+    - name: install dependencies.
+      ansible.builtin.command: mvn clean package
+      args:
+        chdir: /app
+
+    - name: move jar file
+      ansible.builtin.command: mv target/shipping-1.0.jar shipping.jar
+      args:
+        chdir: /app
+
+    - name: copy shipping service to remote sever - shipping (/etc/systemd/system/shipping.service)
+      ansible.builtin.copy:
+        src: shipping.service
+        dest: /etc/systemd/system/shipping.service
+
+    - name: install mysql client
+      ansible.builtin.dnf:
+        name: mysql
+        state: present
+
+    # - name: check if the data is already loaded
+    #   ansible.builtin.command: mysql -h mysql.believeinyou.fun -uroot -pRoboShop@1 -e 'use cities'
+    #   register: city_output
+    #   ignore_errors: true
+
+    # - name: Display city_output
+    #   ansible.builtin.debug:
+    #     msg: "{{city_output}} and {{city_output.rc}}"  
+
+    #-Import of sql script
+    # Name:all“Import all databases from the provided dump file.”
+    # - state- import - “Import a database dump file (usually a .sql file) into the specified database.”
+    - name: Import of shipping data in mysql
+      community.mysql.mysql_db:
+        state: import
+        name: all
+        login_host: mysql.believeinyou.fun
+        login_user: root
+        login_password: RoboShop@1
+        target: "{{item}}"
+
+      loop:
+        - /app/db/schema.sql
+        - /app/db/app-user.sql
+        - /app/db/master-data.sql
+      # when : city_output.rc == 1
+
+        
+    - name: daemon reload enable and start
+      ansible.builtin.systemd_service:
+        name: shipping
+        enabled: true
+        state: started
+        daemon_reload: true  

@@ -1,0 +1,92 @@
+---
+- name: Setting up catalogue server
+  hosts: catalogue
+  become: yes
+  tasks:
+    - name: Disable current module
+      ansible.builtin.command: dnf module disable nodejs -y
+
+    - name: Enable required module
+      ansible.builtin.command: dnf module enable nodejs:20 -y
+
+    - name: Install NodeJS
+      ansible.builtin.dnf:
+        name: nodejs
+        state: present
+
+    - name: Add application User- System User
+      ansible.builtin.user:
+        name: roboshop
+        comment: roboshop system user
+        home: /app
+        # home: Optionally set the user’s home directory.
+        system: true
+        # system: When creating an account state=present, setting this to true makes the user a system account.
+        shell: /sbin/nologin
+        # shell:Optionally set the user’s shell.
+
+    - name: Lets setup an app directory.
+      ansible.builtin.file:
+        path: /app
+        state: directory
+
+    - name: Download the application code
+      ansible.builtin.get_url:
+        url: https://roboshop-artifacts.s3.amazonaws.com/catalogue-v3.zip
+        dest: /tmp/catalogue.zip
+        # dest: Absolute path of where to download the file to.
+
+    - name: Extract catalogue to application /app
+      ansible.builtin.unarchive:
+        src: /tmp/catalogue.zip
+        #       src: If remote_src=no (default), local path to archive file to copy to the target server; can be absolute or relative. If remote_src=yes, path on the target server to existing archive file to unpack.
+
+        # If remote_src=yes and src contains ://, the remote machine will download the file from the URL first.
+
+        dest: /app
+        # dest: Remote absolute path where the archive should be unpacked.
+        remote_src: yes
+
+    - name: download the dependencies.
+      community.general.npm:
+        path: /app
+
+    - name: copy catalogue service to /etc/systemd/system/catalogue.service
+      ansible.builtin.copy:
+        src: catalogue.service
+        dest: /etc/systemd/system/catalogue.service
+
+    - name: Copy mongodb repo to the remote server.
+      ansible.builtin.copy:
+        src: mongo.repo
+        # src- Local path to a file to copy to the remote server.
+        dest: /etc/yum.repos.d/mongo.repo
+        # dest-Remote absolute path where the file should be copied to.
+
+    - name: install mongodb-mongosh client
+      ansible.builtin.dnf:
+        name: mongodb-mongosh
+        state: present
+
+    - name: To check cataogue products are already loaded
+      ansible.builltin.command: mongosh mongodb.believeinyou.fun --quiet --eval "db.getMongo().getDBNames().indexOf('catalogue')"
+      register: catalogue_output
+
+    - name: Load Master Data of the List of products we want to sell and their quantity information also there in the same master data.
+      ansible.builltin.command: mongosh --host mongodb.believeinyou.fun < /app/db/master-data.js
+      when: catalogue_output.stdout | int < 0 # to change catalogue_output.stdout which is string,  to equiavalent of "-1" - > -1
+
+    # </app/db/master-data.js
+
+    # The < symbol means input redirection in shell (Bash, etc.).
+
+    # It takes the contents of the file /app/db/master-data.js and feeds it as input to the mongosh command.
+
+    # In other words, it runs all the MongoDB commands inside that .js file on the MongoDB server.
+
+    - name: daemon reload enable and start
+      ansible.builtin.systemd_service:
+        name: catalogue
+        enabled: true
+        state: started
+        daemon_reload: true

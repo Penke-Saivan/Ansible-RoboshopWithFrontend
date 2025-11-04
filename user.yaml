@@ -1,0 +1,67 @@
+---
+- name: Setting up user server
+  hosts: user
+  become: yes
+  tasks:
+    - name: Disable current module
+      ansible.builtin.command: dnf module disable nodejs -y
+
+    - name: Enable required module
+      ansible.builtin.command: dnf module enable nodejs:20 -y
+
+    - name: Install NodeJS
+      ansible.builtin.dnf:
+        name: nodejs
+        state: present
+
+    - name: Add application User- System User
+      ansible.builtin.user:
+        name: roboshop
+        comment: roboshop system user
+        home: /app
+        system: true
+        shell: /sbin/nologin
+
+    #Removing app directory if already exists
+    - name: Lets remove an app directory if already exists.
+      ansible.builtin.file:
+        path: /app
+        state: absent
+
+    - name: Lets setup an app directory.
+      ansible.builtin.file:
+        path: /app
+        state: directory
+
+    #Removing user file
+    - name: Lets remove a user file
+      ansible.builtin.file:
+        path: /tmp/user.zip
+        state: absent
+
+    - name: Download the application code
+      ansible.builtin.get_url:
+        url: https://roboshop-artifacts.s3.amazonaws.com/user-v3.zip
+        dest: /tmp/user.zip
+
+    - name: Extract user to application /app
+      ansible.builtin.unarchive:
+        src: /tmp/user.zip
+        dest: /app
+        remote_src: yes
+
+    - name: download the dependencies.
+      community.general.npm:
+        path: /app
+
+    - name: copy user service to /etc/systemd/system/user.service
+      ansible.builtin.copy:
+        src: user.service
+        dest: /etc/systemd/system/user.service
+
+    - name: daemon reload enable and start
+      ansible.builtin.systemd_service:
+        name: user
+        enabled: true
+        state: started
+        daemon_reload: true
