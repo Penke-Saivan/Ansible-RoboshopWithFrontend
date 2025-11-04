@@ -5,7 +5,9 @@
   tasks:
   - name: install ngnix
     ansible.builtin.dnf:
-      name: ngnix
+      name: nginx
       state: present
 
-  
+
+  # ansible-playbook -i frontend.aws_ec2.yaml -e ansible_user=ec2-user -e ansible_password=De nginxyaml_Dynamic_inventory.yaml
+ 
