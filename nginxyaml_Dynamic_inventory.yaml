@@ -1,6 +1,6 @@
 ---
 - name: Install ngnix
-  hosts: dynamic-frontend #frontend.aws_ec2.yaml - keyed group name
+  hosts: dynamic__frontend #frontend.aws_ec2.yaml - keyed group name
   tasks:
   - name: install ngnix
     ansible.builtin.dnf:
